@@ -7,6 +7,7 @@ const userRouter = require('./routers/usersRouter')
 const {logRequest} = require('./generalHelpers')
 const { v4: uuidv4 } = require("uuid");
 const { validateUser } = require("./userHelpers");
+const { json } = require('body-parser')
 
 app.use(bodyParser.json())
 /*
@@ -55,7 +56,26 @@ app.post("/users", validateUser, async (req, res, next) => {
 });
 
 app.patch("/users/:userId", validateUser, async (req, res, next) => {
-
+  try {
+    const {username,password,age}=req.body;
+    const users =await fs.promises.readFile("./user.json",{encoding:"utf8"})
+    .then((data) => JSON.parse(data));
+    const newUsers =users.map((user)=>{
+      if (user.id !== req.params.userId) return user;
+      return {
+        username,
+        password,
+        age,
+        id:req.params.userId,
+      };
+    });
+    await fs.promises.writeFile("./user.json",JSON.stringify(newUsers),{
+      encoding:"utf8"
+    });
+    res.status(200).send({message:"User Edited"});
+  } catch (error){
+    next({status:500,internalMessage:error.message});
+  }
 });
 
 
@@ -75,9 +95,47 @@ app.get('/users', async (req,res,next)=>{
 
 
 app.use((err,req,res,next)=>{
+  if(err.status>=500){
+    console.log(err.internalMessage)
+    return res.status(500).send({error :"internal server error"})
+
+  }
+  res.status(err.status).send(err.message)
 
 })
 
+app.post("/login", (req, res) => {
+  const user = req.body
+  fs.readFile('./user.json', {}, (err, data) => {
+      if (err) {
+          console.log("File read failed:", err);
+          return;
+      }
+      const users  = JSON.parse(data)
+      var hasMatch
+      for (let element of users ) {
+          if (element.username == user.username &&
+              element.password == user.password) { hasMatch = true; break; }
+          hasMatch = false;
+      }
+      if (hasMatch == true) return res.status(200).send({ message: "login success" });
+      else {
+          return res.status(403).send({ error: "Login Failed" })
+      }
+  })
+})
+
+
+app.get("/users", (req, res) =>{
+  fs.readFile('./user.json', {}, (err, data)=>{
+      if (err) {
+          console.log("Cant Read File:", err);
+          return;
+      }
+      const users = JSON.parse(data)
+      res.send(users)
+  })
+});
 
 
 app.listen(port, () => {
